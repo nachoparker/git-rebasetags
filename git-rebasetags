@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+
+"""
+Perform a git rebase operation, restoring original tags
+
+Copyleft 2017 by Ignacio Nunez Hernanz <nacho _a_t_ ownyourbits _d_o_t_ com>
+GPL licensed (see LICENSE file in repository root).
+Use at your own risk!
+
+Details:
+    A new bash shell will be spawned in the case of interactive rebasing.
+    Tags will be restored upon exiting that shell.
+
+Usage
+    git-rebasetags <rebase args>
+
+More at https://ownyourbits.com/2017/08/14/rebasing-in-git-without-losing-tabs
+"""
+
+import sys
+import pty
+import os
+from subprocess import run, PIPE
+
+# Save tag-comment information
+TAGS = run(['git', 'show-ref', '--tags'], stdout=PIPE).stdout.decode('utf-8').splitlines()
+
+TAGHASHES = {}
+for line in TAGS:
+    tag    = line.split()[1].split('/')[2]
+    commit = line.split()[0]
+    TAGHASHES[tag] = commit
+
+TAGCOMMENTS = {}
+for tag, commit in TAGHASHES.items():
+    OUT = run(['git', '--no-pager', 'show', '-s', '--format=%s', commit], stdout=PIPE)
+    TAGCOMMENTS[tag] = OUT.stdout.decode('utf-8').rstrip()
+
+# Interactive rebase
+pty.spawn(['/bin/bash', '-c', 'git rebase ' + ' '.join(sys.argv[1:])])
+pty.spawn(['/bin/bash', '-c', 'reset'])
+
+while True:
+    if os.path.exists('.git/rebase-merge'):
+        print('\nRebase in progress. Type \'git rebase --abort\' to cancel. Type \'exit\' when you are done')
+        pty.spawn('/bin/bash')
+    else:
+        break
+
+# Restore tags after rebase, matching comments
+print('Restoring tags...')
+
+OUT = run(['git', 'log', '--oneline'], stdout=PIPE).stdout.decode('utf-8').splitlines()
+
+count = 0
+for line in OUT:
+    for tag, comment in TAGCOMMENTS.items():
+        if comment == ' '.join(line.split()[1:]):
+            commit = line.split()[0]
+            print('tag ' + tag + ' -> ' + commit)
+            run(['git', 'tag', '-d', tag], stdout=PIPE, stderr=PIPE)
+            run(['git', 'tag', tag, commit])
+            count += 1
+
+if count < len(TAGS):
+    print('WARNING: ' + str(len(TAGS) - count) + 'tags without a match')
+
+# License
+#
+# This script is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This script is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this script; if not, write to the
+# Free Software Foundation, Inc., 59 Temple Place, Suite 330,
+# Boston, MA  02111-1307  USA
