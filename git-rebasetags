@@ -50,7 +50,7 @@ while True:
 # Restore tags after rebase, matching comments
 print('Restoring tags...')
 
-OUT = run(['git', 'log', '--oneline'], stdout=PIPE).stdout.decode('utf-8').splitlines()
+OUT = run(['git', 'log', '--no-decorate', '--oneline'], stdout=PIPE).stdout.decode('utf-8').splitlines()
 
 count = 0
 for line in OUT:
